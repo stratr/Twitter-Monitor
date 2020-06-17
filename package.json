@@ -1,0 +1,23 @@
+{
+  "name": "twitter-monitor",
+  "version": "2.0.0",
+  "description": "A node.js app for fetching tweets from Twitter API and storing them into BigQuery",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stratr/twitter-monitor.git"
+  },
+  "author": "Taneli Salonen",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/stratr/twitter-monitor/issues"
+  },
+  "homepage": "https://github.com/stratr/twitter-monitor#readme",
+  "dependencies": {
+    "@google-cloud/bigquery": "^4.7.0",
+    "@google-cloud/storage": "^5.1.0"
+  }
+}

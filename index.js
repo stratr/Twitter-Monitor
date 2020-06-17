@@ -32,6 +32,9 @@ const getConfig = async () => {
     return config;
 }
 
+/*
+This function is the main function that is called by the pub/sub trigger.
+*/
 exports.twitterListener = async (data) => {
     const config = await getConfig();
     console.log(`Configurations (this log should be removed: ${JSON.stringify(config)})`);
@@ -51,7 +54,22 @@ exports.twitterListener = async (data) => {
         access_token_secret: config.twitter.accessTokenSecret
     });
 
-
-
+    fetchAndStoreTweets(data);
 }
 
+async function fetchAndStoreTweets(data) {
+    const bqLatestTweets = await getAlreadyInsertedTweets();
+    const latestTweetIds = bqLatestTweets[0];
+    console.log(`Latest already collected tweet ids fetched from BQ for each mep: ${latestTweetIds}`)
+}
+
+function getAlreadyInsertedTweets() {
+    // insert options, raw: true means that the same rows format is used as in the API documentation
+    const options = {
+        maxResults: 1000,
+    };
+    const bqTable = config.twitter.twitterListId;
+    const query = "SELECT * FROM " + bqTable;
+
+    return bigquery.query(query, options);
+}

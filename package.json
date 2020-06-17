@@ -18,6 +18,8 @@
   "homepage": "https://github.com/stratr/twitter-monitor#readme",
   "dependencies": {
     "@google-cloud/bigquery": "^4.7.0",
-    "@google-cloud/storage": "^5.1.0"
+    "@google-cloud/storage": "^5.1.0",
+    "dotenv": "^8.2.0",
+    "twitter": "^1.7.1"
   }
 }

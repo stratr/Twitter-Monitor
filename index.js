@@ -29,7 +29,7 @@ console.log(`Test mode is on: ${testMode}`);
 This function is the main function that is called by the pub/sub trigger.
 TODO: change so that the twitter list id (and possibly some other configurations come from the pubsub event)
 */
-exports.twitterListener = async (event) => {
+exports.twitterListener2 = async (event) => {
     let eventPayload = null;
     if (event) {
         eventPayload = Buffer.from(event.data, 'base64').toJSON();

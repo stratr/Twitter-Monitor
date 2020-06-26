@@ -1,0 +1,242 @@
+// define the schema for the bq streaming insert
+
+[
+  {
+    "description": "Tweet created at date",
+    "mode": "REQUIRED",
+    "name": "date",
+    "type": "DATE"
+  },
+  {
+    "description": "Tweet created at date (original format)",
+    "mode": "REQUIRED",
+    "name": "date_string",
+    "type": "STRING"
+  },
+  {
+    "description": "Unique identifier for the tweet",
+    "mode": "REQUIRED",
+    "name": "id_str",
+    "type": "STRING"
+  },
+  {
+    "description": "Tweet text",
+    "mode": "REQUIRED",
+    "name": "text",
+    "type": "STRING"
+  },
+  {
+    "description": "",
+    "mode": "NULLABLE",
+    "name": "truncated",
+    "type": "BOOLEAN"
+  },
+  {
+    "description": "",
+    "mode": "NULLABLE",
+    "name": "source",
+    "type": "STRING"
+  },
+  {
+    "description": "",
+    "mode": "REPEATED",
+    "name": "entities_user_mentions",
+    "type": "RECORD",
+    "fields": [
+            {
+                "name": "screen_name",
+                "type": "STRING",
+                "mode": "NULLABLE"
+            }
+    ]
+  },
+  {
+    "description": "",
+    "mode": "REPEATED",
+    "name": "entities_hashtags",
+    "type": "RECORD",
+    "fields": [
+            {
+                "name": "text",
+                "type": "STRING",
+                "mode": "NULLABLE"
+            }
+    ]
+  },
+  {
+    "description": "",
+    "mode": "REPEATED",
+    "name": "entities_symbols",
+    "type": "RECORD",
+    "fields": [
+            {
+                "name": "text",
+                "type": "STRING",
+                "mode": "NULLABLE"
+            }
+    ]
+  },
+  {
+    "description": "",
+    "mode": "REPEATED",
+    "name": "entities_urls",
+    "type": "RECORD",
+    "fields": [
+            {
+                "name": "expanded_url",
+                "type": "STRING",
+                "mode": "NULLABLE"
+            }
+    ]
+  },
+  {
+    "description": "",
+    "mode": "NULLABLE",
+    "name": "in_reply_to_status_id_str",
+    "type": "STRING"
+  },
+  {
+    "description": "",
+    "mode": "NULLABLE",
+    "name": "in_reply_to_user_id_str",
+    "type": "STRING"
+  },
+  {
+    "description": "",
+    "mode": "NULLABLE",
+    "name": "in_reply_to_screen_name",
+    "type": "STRING"
+  },
+  {
+    "description": "",
+    "mode": "NULLABLE",
+    "name": "user_id",
+    "type": "STRING"
+  },
+  {
+    "description": "",
+    "mode": "NULLABLE",
+    "name": "user_name",
+    "type": "STRING"
+  },
+  {
+    "description": "",
+    "mode": "NULLABLE",
+    "name": "user_screen_name",
+    "type": "STRING"
+  },
+  {
+    "description": "",
+    "mode": "NULLABLE",
+    "name": "user_location",
+    "type": "STRING"
+  },
+  {
+    "description": "",
+    "mode": "NULLABLE",
+    "name": "user_description",
+    "type": "STRING"
+  },
+  {
+    "description": "",
+    "mode": "NULLABLE",
+    "name": "user_url",
+    "type": "STRING"
+  },
+  {
+    "description": "",
+    "mode": "NULLABLE",
+    "name": "user_followers",
+    "type": "INTEGER"
+  },
+  {
+    "description": "",
+    "mode": "NULLABLE",
+    "name": "user_friends",
+    "type": "INTEGER"
+  },
+  {
+    "description": "",
+    "mode": "NULLABLE",
+    "name": "user_created_at",
+    "type": "STRING"
+  },
+  {
+    "description": "",
+    "mode": "NULLABLE",
+    "name": "user_listed_count",
+    "type": "INTEGER"
+  },
+  {
+    "description": "",
+    "mode": "NULLABLE",
+    "name": "user_favourites",
+    "type": "INTEGER"
+  },
+  {
+    "description": "",
+    "mode": "NULLABLE",
+    "name": "user_statuses",
+    "type": "INTEGER"
+  },
+  {
+    "description": "",
+    "mode": "NULLABLE",
+    "name": "user_image",
+    "type": "STRING"
+  },
+  {
+    "description": "",
+    "mode": "NULLABLE",
+    "name": "is_quote_status",
+    "type": "BOOLEAN"
+  },
+  {
+    "description": "",
+    "mode": "NULLABLE",
+    "name": "retweet_count",
+    "type": "INTEGER"
+  },
+  {
+    "description": "",
+    "mode": "NULLABLE",
+    "name": "favorite_count",
+    "type": "INTEGER"
+  },
+  {
+    "description": "",
+    "mode": "NULLABLE",
+    "name": "favorited",
+    "type": "BOOLEAN"
+  },
+  {
+    "description": "",
+    "mode": "NULLABLE",
+    "name": "retweeted",
+    "type": "BOOLEAN"
+  },
+  {
+    "description": "",
+    "mode": "NULLABLE",
+    "name": "possibly_sensitive",
+    "type": "BOOLEAN"
+  },
+  {
+    "description": "",
+    "mode": "NULLABLE",
+    "name": "lang",
+    "type": "STRING"
+  },
+  {
+    "description": "",
+    "mode": "NULLABLE",
+    "name": "is_retweet",
+    "type": "BOOLEAN"
+  },
+  {
+    "description": "",
+    "mode": "NULLABLE",
+    "name": "full_json_string",
+    "type": "STRING"
+  }
+]

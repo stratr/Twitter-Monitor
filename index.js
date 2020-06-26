@@ -32,16 +32,12 @@ TODO: change so that the twitter list id (and possibly some other configurations
 exports.twitterListener2 = async (event) => {
     let eventPayload = null;
     if (event) {
-        eventPayload = Buffer.from(event.data, 'base64').toJSON();
-        console.log(`Payload of the triggering event: ${JSON.stringify(eventPayload)}`);
+        eventPayload = Buffer.from(event.data, 'base64').toString();
+        console.log(`Payload of the triggering event: ${eventPayload}`);
     }
 
     const config = await getConfig();
     //console.log(`Configurations: ${JSON.stringify(config)})`);
-
-    // BigQuery configurations
-    const dataset = bigquery.dataset(config.bigQuery.datasetId);
-    const table = dataset.table(config.bigQuery.insertTable);
 
     console.log(`Configurations loaded from storage: dataset = "${config.bigQuery.datasetId}", insert table = "${config.bigQuery.insertTable}".`);
 
@@ -65,6 +61,10 @@ async function fetchAndStoreTweets(config, eventPayload) {
         access_token_key: config.twitter.accessTokenKey,
         access_token_secret: config.twitter.accessTokenSecret
     });
+
+    // BigQuery configurations
+    const dataset = bigquery.dataset(config.bigQuery.datasetId);
+    const table = dataset.table(config.bigQuery.insertTable);
 
     const bqLatestTweets = await getAlreadyInsertedTweets(config.bigQuery.latestTweetsTable);
     const latestTweetIds = bqLatestTweets[0];
@@ -107,7 +107,7 @@ async function fetchAndStoreTweets(config, eventPayload) {
             console.log('Paginating the insert request. Page number ' + i);
             var page = paginate(rowsFiltered, bqPageSize, i);
             if (page.length > 0) {
-                const bqPromise = insertRowsAsStream(page);
+                const bqPromise = insertRowsAsStream(page, table);
                 bqPromises.push(bqPromise);
             }
         }
@@ -197,4 +197,14 @@ function paginate(array, page_size, page_number) {
 
 function arrayPages(array, pageSize) {
     return Math.ceil(array.length / pageSize);
+}
+
+function insertRowsAsStream(rows, table) {
+    // insert options, raw: true means that the same rows format is used as in the API documentation
+    const options = {
+        raw: true,
+        allowDuplicates: false
+    };
+
+    return table.insert(rows, options);
 }

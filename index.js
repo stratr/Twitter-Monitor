@@ -37,7 +37,7 @@ exports.twitterListener2 = async (event) => {
     }
 
     const config = await getConfig();
-    console.log(`Configurations (this log should be removed: ${JSON.stringify(config)})`);
+    //console.log(`Configurations: ${JSON.stringify(config)})`);
 
     // BigQuery configurations
     const dataset = bigquery.dataset(config.bigQuery.datasetId);
@@ -46,7 +46,8 @@ exports.twitterListener2 = async (event) => {
     console.log(`Configurations loaded from storage: dataset = "${config.bigQuery.datasetId}", insert table = "${config.bigQuery.insertTable}".`);
 
     // run the function to fetc the latest tweets into BigQuery
-    fetchAndStoreTweets(config, eventPayload);
+    const fetchJob = await fetchAndStoreTweets(config, eventPayload);
+    console.log(fetchJob);
 }
 
 const getConfig = async () => {
@@ -134,6 +135,7 @@ async function fetchAndStoreTweets(config, eventPayload) {
         });
     } else {
         console.log(`No new tweets found. Aborting.`);
+        return 'No tweets to fetch.';
     }
 }
 

@@ -24,6 +24,7 @@ console.log(`Test mode is on: ${testMode}`);
 
 /*
 This function is the main function that is called by the pub/sub trigger.
+TODO: change so that the twitter list id (and possibly some other configurations come from the pubsub event)
 */
 exports.twitterListener = async (data) => {
     const config = await getConfig();
@@ -35,21 +36,18 @@ exports.twitterListener = async (data) => {
 
     console.log(`Configurations loaded from storage: dataset = "${config.bigQuery.datasetId}", insert table = "${config.bigQuery.insertTable}".`);
 
-    fetchAndStoreTweets(config);
-}
-
-const downloadFile = async (file) => {
-    return file.download();
+    // run the function to fetc the latest tweets into BigQuery
+    fetchAndStoreTweets(config, data);
 }
 
 const getConfig = async () => {
     // Some configs like the Twitter API keys and BigQuery related parameters are stored in GC Storage
-    const configFile = await downloadFile(file);
-    const config = JSON.parse(configFile.toString()); // could there be a more convenient way for this?
+    const configFile = await file.download();
+    const config = JSON.parse(configFile.toString());
     return config;
 }
 
-async function fetchAndStoreTweets(config) {
+async function fetchAndStoreTweets(config, data) {
     // Set up the Twitter client
     const client = new Twitter({
         consumer_key: config.twitter.consumerKey,
@@ -90,7 +88,7 @@ async function fetchAndStoreTweets(config) {
         console.log(`Inserting ${rowsFiltered.length} rows.`);
         console.log(`Example row:\n${JSON.stringify(rowsFiltered[0])}`)
 
-        const bqPageSize = 500;
+        const bqPageSize = 500; // rows per one page in the streaming insert
         const bqPages = arrayPages(rowsFiltered, bqPageSize);
         console.log(`Number of pages in the BQ streaming insert: ${bqPages}`);
 
@@ -104,7 +102,27 @@ async function fetchAndStoreTweets(config) {
             }
         }
 
+        return Promise.all(bqPromises)
+        .then(responses => {
+            console.log('Function initiation data: ' + data);
+            console.log('Responses: ' + responses.length);
+            if (responses.length > 0) {
+                console.log('Tweets inserted to BigQuery.');
+            } else {
+                console.log('No response from the streaming insert.')
+            }
 
+            return 'Process completed';
+
+        })
+        .catch((err) => {
+            // An API error or partial failure occurred.
+            console.log(JSON.stringify(err));
+
+            if (err.name === 'PartialFailureError') {
+                console.log('PartialFailureError');
+            }
+        });
     } else {
         console.log(`No new tweets found. Aborting.`);
     }

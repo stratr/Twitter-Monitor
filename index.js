@@ -17,6 +17,9 @@ const file = bucket.file(fileName);
 /*
 Test commands:
 node -e 'require("./index").testing()'
+
+Deploy:
+// gcloud functions deploy twitterListener2 --runtime nodejs10 --trigger-topic fetch_ke_tweets2 --timeout 180s
 */
 
 console.log(`Test mode is on: ${testMode}`);
@@ -26,7 +29,13 @@ console.log(`Test mode is on: ${testMode}`);
 This function is the main function that is called by the pub/sub trigger.
 TODO: change so that the twitter list id (and possibly some other configurations come from the pubsub event)
 */
-exports.twitterListener = async (data) => {
+exports.twitterListener = async (event) => {
+    let eventPayload = null;
+    if (event) {
+        eventPayload = Buffer.from(event.data, 'base64').toJSON();
+        console.log(`Payload of the triggering event: ${JSON.stringify(eventPayload)}`);
+    }
+
     const config = await getConfig();
     console.log(`Configurations (this log should be removed: ${JSON.stringify(config)})`);
 
@@ -37,7 +46,7 @@ exports.twitterListener = async (data) => {
     console.log(`Configurations loaded from storage: dataset = "${config.bigQuery.datasetId}", insert table = "${config.bigQuery.insertTable}".`);
 
     // run the function to fetc the latest tweets into BigQuery
-    fetchAndStoreTweets(config, data);
+    fetchAndStoreTweets(config, eventPayload);
 }
 
 const getConfig = async () => {
@@ -47,7 +56,7 @@ const getConfig = async () => {
     return config;
 }
 
-async function fetchAndStoreTweets(config, data) {
+async function fetchAndStoreTweets(config, eventPayload) {
     // Set up the Twitter client
     const client = new Twitter({
         consumer_key: config.twitter.consumerKey,
@@ -104,7 +113,7 @@ async function fetchAndStoreTweets(config, data) {
 
         return Promise.all(bqPromises)
         .then(responses => {
-            console.log('Function initiation data: ' + data);
+            console.log('Function initiation data: ' + eventPayload);
             console.log('Responses: ' + responses.length);
             if (responses.length > 0) {
                 console.log('Tweets inserted to BigQuery.');

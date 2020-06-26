@@ -32,8 +32,10 @@ TODO: change so that the twitter list id (and possibly some other configurations
 exports.twitterListener2 = async (event) => {
     let eventPayload = null;
     if (event) {
-        eventPayload = Buffer.from(event.data, 'base64').toString();
-        console.log(`Payload of the triggering event: ${eventPayload}`);
+        // function could be updated to get more config parameters from the pubsub event
+        // that way it would be possible to use the same function for multiple jobs
+        eventPayload = JSON.parse(Buffer.from(event.data, 'base64').toString());
+        console.log(`Payload of the triggering event: ${JSON.stringify(eventPayload)}`);
     }
 
     const config = await getConfig();

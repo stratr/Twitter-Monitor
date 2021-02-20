@@ -4,7 +4,8 @@
   "description": "A node.js app for fetching tweets from Twitter API and storing them into BigQuery",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node -e 'require(\"./index\").twitterListener2()'",
+    "gcloud-deploy": "gcloud functions deploy twitterListener2 --runtime nodejs10 --trigger-topic fetch_ke_tweets2 --timeout 180s"
   },
   "repository": {
     "type": "git",

@@ -10,20 +10,8 @@ moment().format();
 
 const { Storage } = require('@google-cloud/storage');
 const storage = new Storage();
-const bucket = storage.bucket('tanelis_auth');
-const fileName = 'twitterConfig.json';
-const file = bucket.file(fileName);
-
-/*
-Test commands:
-node -e 'require("./index").testing()'
-
-Deploy:
-// gcloud functions deploy twitterListener2 --runtime nodejs10 --trigger-topic fetch_ke_tweets2 --timeout 180s
-*/
 
 console.log(`Test mode is on: ${testMode}`);
-
 
 /*
 This function is the main function that is called by the pub/sub trigger.
@@ -39,23 +27,62 @@ exports.twitterListener2 = async (event) => {
     }
 
     const config = await getConfig();
-    //console.log(`Configurations: ${JSON.stringify(config)})`);
+    console.log(`Configurations: ${JSON.stringify(config)})`);
 
     console.log(`Configurations loaded from storage: dataset = "${config.bigQuery.datasetId}", insert table = "${config.bigQuery.insertTable}".`);
 
+    const screenNames = await getScreenNames(config);
+    console.log(`Number of screen names found: ${screenNames.length}`);
+
+
+
     // run the function to fetc the latest tweets into BigQuery
-    const fetchJob = await fetchAndStoreTweets(config, eventPayload);
-    console.log(fetchJob);
+    const fetchJob = await fetchAndStoreTweets(config, screenNames, eventPayload);
+    //console.log(fetchJob);
 }
 
 const getConfig = async () => {
     // Some configs like the Twitter API keys and BigQuery related parameters are stored in GC Storage
+    const bucket = storage.bucket('tanelis_auth');
+    const fileName = 'twitterConfig.json';
+    const file = bucket.file(fileName);
+
     const configFile = await file.download();
     const config = JSON.parse(configFile.toString());
     return config;
 }
 
-async function fetchAndStoreTweets(config, eventPayload) {
+const getScreenNames = async (config) => {
+    // returns the list of screen names that are followed
+
+    const twitterClient = new Twitter({
+        consumer_key: config.twitter.consumerKey,
+        consumer_secret: config.twitter.consumerSecret,
+        access_token_key: config.twitter.accessTokenKey,
+        access_token_secret: config.twitter.accessTokenSecret
+    });
+
+    // Screen name list from the Eduskunta managed twitter list (this is a fallback for the main list)
+    const twitterList = await twitterClient.get('lists/members', { list_id: config.twitter.twitterListId, count: 300 }); // twitter member list's id is defined in the config json
+    const twitterScreenNames = twitterList.users.map((user) => {
+        return user.screen_name;
+    });
+
+    // Get the similar list from BigQuery (self managed main list)
+    const query = `SELECT DISTINCT screen_name FROM \`${config.bigQuery.screenNames}\` 
+    WHERE screen_name IS NOT NULL AND active_term = TRUE`
+    const bqRequest = await queryRequest(query, 1000);
+    bqScreenNames = bqRequest.map((user) => {
+        return user.screen_name;
+    });
+
+    // Merge the lists into one
+    const screenNames = Array.from(new Set(twitterScreenNames.concat(bqScreenNames)));
+
+    return screenNames;
+}
+
+async function fetchAndStoreTweets(config, screenNames, eventPayload) {
     // Set up the Twitter client
     const client = new Twitter({
         consumer_key: config.twitter.consumerKey,
@@ -68,22 +95,26 @@ async function fetchAndStoreTweets(config, eventPayload) {
     const dataset = bigquery.dataset(config.bigQuery.datasetId);
     const table = dataset.table(config.bigQuery.insertTable);
 
-    const bqLatestTweets = await getAlreadyInsertedTweets(config.bigQuery.latestTweetsTable);
-    const latestTweetIds = bqLatestTweets[0];
+    //const bqLatestTweets = await getAlreadyInsertedTweets(config.bigQuery.latestTweetsTable);
+    const latestTweetIds = await queryRequest(`SELECT * FROM \`${config.bigQuery.latestTweetsTable}\``, 1000);
     //console.log(`Latest already collected tweet ids fetched from BQ for each mep: ${JSON.stringify(latestTweetIds)}`)
 
     // determine how old tweets are accepted
     const startDate = moment('2019-10-07');
     const sinceDate = moment().subtract(180, "days");
 
-    // Get all the Twitter user names to fetch
-    const members = await client.get('lists/members', { list_id: config.twitter.twitterListId, count: 300 }); // twitter member list's id is defined in the config json
-    var memberScreenNames = members.users.map(member => { return { 'user_screen_name': member.screen_name, max_id: null } });
-    if (typeof testMode !== 'undefined' && testMode === true) { memberScreenNames = memberScreenNames.slice(0, 5) }; // reduce the amount of user ids when testing
-    console.log(`Count of member screen names to fetch: ${memberScreenNames.length}`)
+    // Merge the followed screen names with their latest tweet ids
+    let membersLatest = screenNames.map((sn) => {
+        return {
+            user_screen_name: sn,
+            max_id: null
+        }
+    }).map(x => Object.assign(x, latestTweetIds.find(y => y.user_screen_name == x.user_screen_name)));
 
-    // Merge member screen names with their latest tweets
-    const membersLatest = memberScreenNames.map(x => Object.assign(x, latestTweetIds.find(y => y.user_screen_name == x.user_screen_name)));
+    // If in test mode only include first 5 members
+    if (testMode) {
+        membersLatest = membersLatest.slice(5);
+    }
 
     // Get the tweets for the members fetched earlier
     const tweets = await fetchMultipleUserTweets(client, membersLatest);
@@ -115,26 +146,26 @@ async function fetchAndStoreTweets(config, eventPayload) {
         }
 
         return Promise.all(bqPromises)
-        .then(responses => {
-            console.log('Function initiation data: ' + eventPayload);
-            console.log('Responses: ' + responses.length);
-            if (responses.length > 0) {
-                console.log('Tweets inserted to BigQuery.');
-            } else {
-                console.log('No response from the streaming insert.')
-            }
+            .then(responses => {
+                console.log('Function initiation data: ' + eventPayload);
+                console.log('Responses: ' + responses.length);
+                if (responses.length > 0) {
+                    console.log('Tweets inserted to BigQuery.');
+                } else {
+                    console.log('No response from the streaming insert.')
+                }
 
-            return 'Process completed';
+                return 'Process completed';
 
-        })
-        .catch((err) => {
-            // An API error or partial failure occurred.
-            console.log(JSON.stringify(err));
+            })
+            .catch((err) => {
+                // An API error or partial failure occurred.
+                console.log(JSON.stringify(err));
 
-            if (err.name === 'PartialFailureError') {
-                console.log('PartialFailureError');
-            }
-        });
+                if (err.name === 'PartialFailureError') {
+                    console.log('PartialFailureError');
+                }
+            });
     } else {
         console.log(`No new tweets found. Aborting.`);
         return 'No tweets to fetch.';
@@ -153,6 +184,18 @@ function getAlreadyInsertedTweets(latestTweetsTable) {
     console.log(query);
 
     return bigquery.query(query, options);
+}
+
+const queryRequest = async (query, maxResults) => {
+    // latestTweetsTable is a view in bigQuery that returns the id of the latest already collected tweet for each of the user names
+    // insert options, raw: true means that the same rows format is used as in the API documentation
+    const options = {
+        maxResults: maxResults,
+    };
+
+    const results = await bigquery.query(query, options);
+
+    return results[0];
 }
 
 async function fetchMultipleUserTweets(client, members) {
@@ -181,7 +224,7 @@ async function fetchMultipleUserTweets(client, members) {
         });
 }
 
-const flatten = function(arr, result = []) {
+const flatten = function (arr, result = []) {
     for (let i = 0, length = arr.length; i < length; i++) {
         const value = arr[i];
         if (Array.isArray(value)) {

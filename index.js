@@ -64,7 +64,7 @@ exports.twitterListener2 = async (event) => {
     // Filter the tweets with this date criteria
     const startDate = moment('2019-10-07');
     const sinceDate = moment().subtract(180, "days");
-    const tweetsFiltered = tweets.filter((tweet) => {
+    const g = tweets.filter((tweet) => {
         const tweetDate = new Date(tweet.created_at);
         return moment(tweetDate).isAfter(startDate) && moment(tweetDate).isAfter(sinceDate);
     });

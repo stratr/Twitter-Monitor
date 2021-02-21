@@ -11,8 +11,6 @@ moment().format();
 const { Storage } = require('@google-cloud/storage');
 const storage = new Storage();
 
-console.log(`Test mode is on: ${testMode}`);
-
 /*
 This function is the main function that is called by the pub/sub trigger.
 TODO: change so that the twitter list id (and possibly some other configurations come from the pubsub event)
@@ -26,18 +24,55 @@ exports.twitterListener2 = async (event) => {
         console.log(`Payload of the triggering event: ${JSON.stringify(eventPayload)}`);
     }
 
+    // TODO: use something like this to pass data from the pub/sub event to the function
+    // const triggerData = {
+    //     runMode: 'test',
+    //     insertDataSet: '',
+    //     insertTable: ''        
+    // }
+
+    // Load the configuration file from Storage (TODO maybe use env variables or event parameters instead)
     const config = await getConfig();
     console.log(`Configurations: ${JSON.stringify(config)})`);
 
-    console.log(`Configurations loaded from storage: dataset = "${config.bigQuery.datasetId}", insert table = "${config.bigQuery.insertTable}".`);
+    // Get the latest tweet id for all of the mps that have at least some tweet stored in the DB
+    const latestTweetIds = await queryRequest(`SELECT * FROM \`${config.bigQuery.latestTweetsTable}\``, 1000);
+    console.log(`Found latest tweet id for ${latestTweetIds.length} members. Can include also members who are not anymore on the list of followed users.`);
 
+    // Get the list of screen names for the users that are being followed
     const screenNames = await getScreenNames(config);
     console.log(`Number of screen names found: ${screenNames.length}`);
 
+    // Merge the followed screen names with their latest tweet ids
+    let membersLatest = screenNames.map((sn) => {
+        return {
+            user_screen_name: sn,
+            max_id: null
+        }
+    }).map(x => Object.assign(x, latestTweetIds.find(y => y.user_screen_name == x.user_screen_name)));
 
+    // If in test mode only include first 5 members
+    if (testMode) {
+        console.log('Running in test mode: limited twitter API requests to user timelines.')
+        membersLatest = membersLatest.slice(0, 10);
+    }
 
-    // run the function to fetc the latest tweets into BigQuery
-    const fetchJob = await fetchAndStoreTweets(config, screenNames, eventPayload);
+    // Check the timelines for each of the followed members and fetch the latest tweets
+    const tweets = await fetchMultipleUserTweets(config, membersLatest);
+
+    // Filter the tweets with this date criteria
+    const startDate = moment('2019-10-07');
+    const sinceDate = moment().subtract(180, "days");
+    const tweetsFiltered = tweets.filter((tweet) => {
+        const tweetDate = new Date(tweet.created_at);
+        return moment(tweetDate).isAfter(startDate) && moment(tweetDate).isAfter(sinceDate);
+    });
+
+    // Map the new found tweets for the BigQuery insert schema
+    const bqRows = bigQueryMapper(tweetsFiltered);
+
+    // Insert the new tweets into the BigQuery table
+    const insertTweets = await insertTweetsToBigQuery(config, bqRows, eventPayload);
     //console.log(fetchJob);
 }
 
@@ -81,53 +116,15 @@ const getScreenNames = async (config) => {
 
     return screenNames;
 }
-
-async function fetchAndStoreTweets(config, screenNames, eventPayload) {
-    // Set up the Twitter client
-    const client = new Twitter({
-        consumer_key: config.twitter.consumerKey,
-        consumer_secret: config.twitter.consumerSecret,
-        access_token_key: config.twitter.accessTokenKey,
-        access_token_secret: config.twitter.accessTokenSecret
-    });
+const insertTweetsToBigQuery = async (config, bqRows, eventPayload) => {
+    // TODO: inputs should be table and rows, eventPayload is not needed here
 
     // BigQuery configurations
     const dataset = bigquery.dataset(config.bigQuery.datasetId);
     const table = dataset.table(config.bigQuery.insertTable);
 
-    //const bqLatestTweets = await getAlreadyInsertedTweets(config.bigQuery.latestTweetsTable);
-    const latestTweetIds = await queryRequest(`SELECT * FROM \`${config.bigQuery.latestTweetsTable}\``, 1000);
-    //console.log(`Latest already collected tweet ids fetched from BQ for each mep: ${JSON.stringify(latestTweetIds)}`)
-
-    // determine how old tweets are accepted
-    const startDate = moment('2019-10-07');
-    const sinceDate = moment().subtract(180, "days");
-
-    // Merge the followed screen names with their latest tweet ids
-    let membersLatest = screenNames.map((sn) => {
-        return {
-            user_screen_name: sn,
-            max_id: null
-        }
-    }).map(x => Object.assign(x, latestTweetIds.find(y => y.user_screen_name == x.user_screen_name)));
-
-    // If in test mode only include first 5 members
-    if (testMode) {
-        membersLatest = membersLatest.slice(5);
-    }
-
-    // Get the tweets for the members fetched earlier
-    const tweets = await fetchMultipleUserTweets(client, membersLatest);
-    //console.log(`${tweets.length} tweets fetched.\nSome tweets:\n${tweets.slice(0,5).map(tweet => {return tweet.text ? tweet.text : tweet.full_text}).join('\n')}`)
-
-    // Map the rows for the BQ streaming insert
-    const bqRows = bigQueryMapper(tweets);
-    const rowsFiltered = bqRows.filter(row => {
-        return moment(row.json.date).isAfter(startDate) && moment(row.json.date).isAfter(sinceDate);
-    });
-
     // Store the rows into BigQuery
-    if (rowsFiltered.length > 0) {
+    if (bqRows.length > 0) {
         console.log(`Inserting ${rowsFiltered.length} rows.`);
         console.log(`Example row:\n${JSON.stringify(rowsFiltered[0])}`)
 
@@ -172,20 +169,6 @@ async function fetchAndStoreTweets(config, screenNames, eventPayload) {
     }
 }
 
-function getAlreadyInsertedTweets(latestTweetsTable) {
-    // latestTweetsTable is a view in bigQuery that returns the id of the latest already collected tweet for each of the user names
-    // insert options, raw: true means that the same rows format is used as in the API documentation
-    const options = {
-        maxResults: 1000,
-    };
-
-    const query = "SELECT * FROM " + latestTweetsTable;
-
-    console.log(query);
-
-    return bigquery.query(query, options);
-}
-
 const queryRequest = async (query, maxResults) => {
     // latestTweetsTable is a view in bigQuery that returns the id of the latest already collected tweet for each of the user names
     // insert options, raw: true means that the same rows format is used as in the API documentation
@@ -198,20 +181,33 @@ const queryRequest = async (query, maxResults) => {
     return results[0];
 }
 
-async function fetchMultipleUserTweets(client, members) {
+async function fetchMultipleUserTweets(config, members) {
+    // Set up the Twitter client
+    const twitterClient = new Twitter({
+        consumer_key: config.twitter.consumerKey,
+        consumer_secret: config.twitter.consumerSecret,
+        access_token_key: config.twitter.accessTokenKey,
+        access_token_secret: config.twitter.accessTokenSecret
+    });
+
     const tweetPromises = [];
     members.forEach(member => {
         const sinceId = member.max_id === null ? '1' : member.max_id;
 
-        // Fetch all the tweets, for eachof the users, that have not yet been collected
-        const tweetPromise = client.get('statuses/user_timeline', {
-            screen_name: member.user_screen_name,
-            count: 200,
-            include_rts: true,
-            since_id: sinceId,
-            tweet_mode: 'extended'
-        });
-        tweetPromises.push(tweetPromise);
+        // Fetch all the tweets, for each of the users, that have not yet been collected
+        try {
+            const tweetPromise = twitterClient.get('statuses/user_timeline', {
+                screen_name: member.user_screen_name,
+                count: 200,
+                include_rts: true,
+                since_id: sinceId,
+                tweet_mode: 'extended'
+            });
+            tweetPromises.push(tweetPromise);
+        } catch (e) {
+            console.log('Failed to make the user_timeline request.')
+            console.log(e);
+        }
     });
 
     return Promise.all(tweetPromises)

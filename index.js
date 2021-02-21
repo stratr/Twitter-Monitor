@@ -54,7 +54,8 @@ exports.twitterListener2 = async (event) => {
     // If in test mode only include first 5 members
     if (testMode) {
         console.log('Running in test mode: limited twitter API requests to user timelines.')
-        membersLatest = membersLatest.slice(60, 80);
+        membersLatest = membersLatest.slice(170, 180);
+        console.log(`membersLatest.length = ${membersLatest.length}`)
     }
 
     // Check the timelines for each of the followed members and fetch the latest tweets
@@ -202,8 +203,16 @@ async function fetchMultipleUserTweets(config, members) {
                 include_rts: true,
                 since_id: sinceId,
                 tweet_mode: 'extended'
+            }).catch((err) => {
+                // catch some errors in the individual promises
+                // e.g. "Sorry, that page does not xist. Code 34"
+                console.log(`Error with user ${member.user_screen_name}: \n${JSON.stringify(err)}\n${err}`)
+                return err;
             });
-            tweetPromises.push(tweetPromise);
+
+            if (tweetPromise) {
+                tweetPromises.push(tweetPromise);
+            }
         } catch (e) {
             console.log('Failed to make the user_timeline request.')
             console.log(e);

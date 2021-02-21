@@ -4,7 +4,6 @@ require('dotenv').config();
 const testMode = process.env.TEST === "1" ? true : false;
 
 const { BigQuery } = require('@google-cloud/bigquery');
-const bigquery = new BigQuery();
 const moment = require('moment');
 moment().format();
 
@@ -64,7 +63,7 @@ exports.twitterListener2 = async (event) => {
     // Filter the tweets with this date criteria
     const startDate = moment('2019-10-07');
     const sinceDate = moment().subtract(180, "days");
-    const g = tweets.filter((tweet) => {
+    const tweetsFiltered = tweets.filter((tweet) => {
         const tweetDate = new Date(tweet.created_at);
         return moment(tweetDate).isAfter(startDate) && moment(tweetDate).isAfter(sinceDate);
     });
@@ -73,7 +72,7 @@ exports.twitterListener2 = async (event) => {
     const bqRows = bigQueryMapper(tweetsFiltered);
 
     // Insert the new tweets into the BigQuery table
-    const insertTweets = await insertTweetsToBigQuery(config, bqRows, eventPayload);
+    const insertTweets = await insertTweetsToBigQuery(config.bigQuery.datasetId, config.bigQuery.insertTable, bqRows);
     console.log(insertTweets);
 }
 
@@ -117,12 +116,12 @@ const getScreenNames = async (config) => {
 
     return screenNames;
 }
-const insertTweetsToBigQuery = async (config, bqRows, eventPayload) => {
-    // TODO: inputs should be table and rows, eventPayload is not needed here
+const insertTweetsToBigQuery = async (datasetId, tableName, bqRows) => {
+    const bigquery = new BigQuery()
 
     // BigQuery configurations
-    const dataset = bigquery.dataset(config.bigQuery.datasetId);
-    const table = dataset.table(config.bigQuery.insertTable);
+    const dataset = bigquery.dataset(datasetId);
+    const table = dataset.table(tableName);
 
     // Store the rows into BigQuery
     if (bqRows.length > 0) {
@@ -145,7 +144,6 @@ const insertTweetsToBigQuery = async (config, bqRows, eventPayload) => {
 
         return Promise.all(bqPromises)
             .then(responses => {
-                console.log('Function initiation data: ' + eventPayload);
                 console.log('Responses: ' + responses.length);
                 if (responses.length > 0) {
                     console.log('Tweets inserted to BigQuery.');
@@ -171,8 +169,8 @@ const insertTweetsToBigQuery = async (config, bqRows, eventPayload) => {
 }
 
 const queryRequest = async (query, maxResults) => {
-    // latestTweetsTable is a view in bigQuery that returns the id of the latest already collected tweet for each of the user names
-    // insert options, raw: true means that the same rows format is used as in the API documentation
+    const bigquery = new BigQuery();
+
     const options = {
         maxResults: maxResults,
     };
@@ -182,7 +180,7 @@ const queryRequest = async (query, maxResults) => {
     return results[0];
 }
 
-async function fetchMultipleUserTweets(config, members) {
+const fetchMultipleUserTweets = async (config, members) => {
     // Set up the Twitter client
     const twitterClient = new Twitter({
         consumer_key: config.twitter.consumerKey,
@@ -191,7 +189,9 @@ async function fetchMultipleUserTweets(config, members) {
         access_token_secret: config.twitter.accessTokenSecret
     });
 
+    // fetched tweets to be returned
     const tweetPromises = [];
+
     members.forEach(member => {
         const sinceId = member.max_id === null ? '1' : member.max_id;
 
@@ -206,7 +206,15 @@ async function fetchMultipleUserTweets(config, members) {
             }).catch((err) => {
                 // catch some errors in the individual promises
                 // e.g. "Sorry, that page does not xist. Code 34"
-                console.log(`Error with user ${member.user_screen_name}: \n${JSON.stringify(err)}\n${err}`)
+
+                if (err[0] && err[0].code && err[0].code === 34) {
+                    console.log(`User not found: ${member.user_screen_name}. 
+                    Page doesn't exist (code 34). Probably user has changed their user name.`)
+                } else if (err) {
+                    console.log(`User not found: ${member.user_screen_name}. 
+                    User profile could be set set to hidden.`) 
+                }
+                
                 return err;
             });
 
@@ -217,7 +225,7 @@ async function fetchMultipleUserTweets(config, members) {
             console.log('Failed to make the user_timeline request.')
             console.log(e);
         }
-    });
+    });    
 
     return Promise.all(tweetPromises)
         .then(tweets => {

@@ -54,7 +54,7 @@ exports.twitterListener2 = async (event) => {
     // If in test mode only include first 5 members
     if (testMode) {
         console.log('Running in test mode: limited twitter API requests to user timelines.')
-        membersLatest = membersLatest.slice(0, 10);
+        membersLatest = membersLatest.slice(60, 80);
     }
 
     // Check the timelines for each of the followed members and fetch the latest tweets
@@ -73,7 +73,7 @@ exports.twitterListener2 = async (event) => {
 
     // Insert the new tweets into the BigQuery table
     const insertTweets = await insertTweetsToBigQuery(config, bqRows, eventPayload);
-    //console.log(fetchJob);
+    console.log(insertTweets);
 }
 
 const getConfig = async () => {
@@ -125,17 +125,17 @@ const insertTweetsToBigQuery = async (config, bqRows, eventPayload) => {
 
     // Store the rows into BigQuery
     if (bqRows.length > 0) {
-        console.log(`Inserting ${rowsFiltered.length} rows.`);
-        console.log(`Example row:\n${JSON.stringify(rowsFiltered[0])}`)
+        console.log(`Inserting ${bqRows.length} rows.`);
+        console.log(`Example row:\n${JSON.stringify(bqRows[0])}`)
 
         const bqPageSize = 500; // rows per one page in the streaming insert
-        const bqPages = arrayPages(rowsFiltered, bqPageSize);
+        const bqPages = arrayPages(bqRows, bqPageSize);
         console.log(`Number of pages in the BQ streaming insert: ${bqPages}`);
 
         const bqPromises = [];
         for (let i = 0; i < bqPages; i++) {
             console.log('Paginating the insert request. Page number ' + i);
-            var page = paginate(rowsFiltered, bqPageSize, i);
+            var page = paginate(bqRows, bqPageSize, i);
             if (page.length > 0) {
                 const bqPromise = insertRowsAsStream(page, table);
                 bqPromises.push(bqPromise);
